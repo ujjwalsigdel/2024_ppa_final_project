@@ -1,0 +1,476 @@
+---
+title: "Yield monitor wrangling - 2017"
+format:
+  html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    number-sections: true
+    theme: journal
+    #cerulean, journal, quartz, sketchy, slate, morph, superhero, vapor
+knitr: 
+  opts_chunk: 
+    message: false
+    warning: false
+---
+
+# Objectives  
+
+# Setup  
+## Loading packages  
+```{r setup }
+#| message: false
+
+#loading packages (add to the list as we need) 
+library(readr)
+library(janitor)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(sf)
+library(viridis)
+library(mapview)
+
+```
+
+## Importing data  
+```{r yield17 }
+yield <- read_csv("../data/Deer Run1 2016 Yield.csv") %>% 
+  clean_names() %>% 
+  dplyr::select(long, lat, speed_mph, dry_yield) %>% 
+  rename(lon = long, 
+         lat = lat,
+         yield_buac = dry_yield) %>% 
+  mutate(yield_kgha = yield_buac*67.25,
+         speed_kmh = speed_mph*1.609344) %>% 
+  dplyr::select(lon, lat, yield_kgha, speed_kmh)
+
+yield 
+
+```
+
+# EDA  
+```{r summary}
+summary(yield) 
+```
+
+
+```{r yield distribution - density plot}
+ggplot(yield, aes(x=yield_kgha))+
+  geom_density()
+
+```
+
+```{r speed distribution - density plot}
+ggplot(yield, aes(x=speed_kmh))+
+  geom_density()+
+  geom_rug()
+
+```
+
+```{r yield map}
+ggplot(yield, aes(x= lon,
+                    y = lat))+
+  geom_point(aes(color = yield_kgha))+
+  scale_color_viridis_b()
+
+```
+
+```{r yield restricted map}
+yield %>% 
+  filter(yield_kgha < 25000) %>% 
+ggplot(aes(x= lon,
+                    y = lat))+
+  geom_point(aes(color = yield_kgha))+
+  scale_color_viridis_b()
+  
+
+```
+
+```{r yield x speed}
+ggplot(yield, aes(x=speed_kmh, 
+                    y=yield_kgha))+
+  geom_point()+
+  geom_smooth()
+
+```
+
+
+# Wrangling  
+```{r yield17_w}
+  yield_w <- yield %>% 
+  st_as_sf(coords = c("lon", "lat")) %>% 
+  st_set_crs(value = 4326) %>% 
+  st_transform(crs = 6345) #%>%
+  # st_coordinates() %>%
+  # as.data.frame() %>%
+  # rename(x = X, y = Y) %>%
+  # cbind(yield, .) %>% 
+  # select(-lat, -lon)
+  
+  
+yield
+
+```
+
+# Maps  
+```{r static}
+yield_w %>%
+  filter(yield_kgha < 25000) %>%
+  ggplot()+
+  geom_sf(aes(color = yield_kgha), size = .1)+
+  scale_color_viridis_b()
+
+```
+
+## Summary  
+```{r }
+summary(yield_w) 
+```
+
+## Raw map
+```{r}
+yieldmap_raw <- ggplot(yield_w)+
+                geom_sf(aes(color = yield_kgha), size = .1)+
+                scale_color_viridis_b()
+
+yieldmap_raw
+```
+
+## Raw map interactive  
+```{r}
+#| warning: false
+
+yieldmap_raw_int <- yield_w %>%
+  filter(yield_kgha < 25000) %>%
+  mapview(zcol = "yield_kgha",
+        col.regions = viridis(3),
+        alpha.regions = 1,
+        cex = .1,
+        lwd = 0,
+        map.types = 'Esri.WorldImagery'
+)
+
+yieldmap_raw_int
+```
+
+Today we are applying 5 filters:  
+
+- Min and max yield  
+- Min and max speed  
+- Position  
+
+# Yield editor - Min/max yield  
+## Raw yield distribution  
+
+```{r}
+ggplot(data = yield_w, 
+       aes(x = yield_kgha))+
+  geom_density()+
+  geom_rug()
+```
+
+## Raw yield summary  
+```{r}
+summary(yield_w$yield_kgha)
+```
+
+## Raw yield quantiles  
+```{r}
+lowq_yield <- quantile(yield_w$yield_kgha, 0.1)
+lowq_yield
+
+upq_yield <- quantile(yield_w$yield_kgha, 0.99) 
+upq_yield
+
+iqr <- upq_yield - lowq_yield
+iqr
+
+miny <- lowq_yield - (iqr*0.25)
+miny
+
+maxy <- upq_yield + (iqr*0.25) 
+maxy
+```
+
+## Min/max raw yield quantiles plot  
+```{r}
+ggplot()+
+  geom_density(data = yield_w, 
+               aes(x = yield_kgha))+
+  geom_vline(xintercept = lowq_yield, color = "red", linetype = 2)+
+  geom_vline(xintercept = upq_yield, color = "blue", linetype = 2)+
+  geom_vline(xintercept = miny, color = "red", linetype = 1)+
+  geom_vline(xintercept = maxy, color = "blue", linetype = 1)+
+  annotate(geom = 'rect',
+           ymin = 0, 
+           ymax = Inf,
+           xmin = miny,
+           xmax = maxy,
+           alpha = .4,
+           fill = 'green'
+             )
+
+```
+
+## Filtering min/max raw yield  
+```{r}
+yield_w_yf <- yield_w %>% 
+  filter(yield_kgha > miny & yield_kgha < maxy)
+
+yield_w_yf
+```
+
+Before filtering we had a total of 31,724 data rows.
+How many rows now after filtering?
+
+## Min/max yield cleaned summary  
+```{r}
+summary(yield_w_yf$yield_kgha)
+```
+All right, all done filtering based on yield min and max.
+Now let’s do the same for speed.
+
+# Yield editor - Min/max speed  
+## Raw speed distribution  
+```{r}
+ggplot(data = yield_w, 
+       aes(x = speed_kmh))+
+  geom_density()+
+  geom_rug()
+```
+
+## Raw speed summary  
+```{r}
+summary(yield_w$speed_kmh) 
+```
+
+## Raw speed quantiles  
+```{r}
+lowq_speed <- quantile(yield_w$speed_kmh, 0.08)
+lowq_speed
+
+upq_speed <- quantile(yield_w$speed_kmh, 0.99)
+upq_speed
+
+iqr <- upq_speed - lowq_speed
+iqr
+
+minv <- lowq_speed - (0.18*iqr)
+minv
+
+maxv <- upq_speed + (0.18*iqr)
+maxv
+
+```
+
+## Min/max raw speed quantiles plot  
+```{r}
+ggplot()+
+  geom_density(data = yield_w, 
+               aes(x = speed_kmh))+
+  geom_vline(xintercept = lowq_speed, 
+             color = "red", 
+             linetype = 2)+
+  geom_vline(xintercept = upq_speed, 
+             color = "blue", 
+             linetype = 2)+
+  geom_vline(xintercept = minv, 
+             color = "red", 
+             linetype =1)+
+  geom_vline(xintercept = maxv, 
+             color = "blue", 
+             linetype = 1)+
+  annotate(geom = "rect",
+           ymin = 0, 
+           ymax = Inf,
+           xmin = minv, 
+           xmax = maxv,
+           alpha = .6, 
+           fill = "green")
+
+```
+
+## Filtering min/max raw speed  
+```{r}
+yield17_w_sf <- yield17_w_yf %>% 
+  filter(speed_mph > minv & speed_mph < maxv)
+
+yield17_w_sf
+
+```
+
+## Min/max speed cleaned summary  
+```{r}
+summary(yield17_w_sf$speed_mph)
+```
+
+# Yield editor - Position  
+Original position filter was based on quantiles too.
+Why filter based on boundary?  
+
+## Field boundary  
+```{r}
+boundary <- read_sf("../../05_digitizing/output/boundary.geojson")
+
+boundary
+#mapview(boundary)
+```
+
+```{r}
+boundary_w <- boundary %>% 
+  st_transform(crs = 6345)
+  
+boundary_w
+```
+
+## Field boundary plot  
+```{r}
+yieldmap_raw +
+  geom_sf(data = boundary_w, fill = NA)
+
+```
+
+Let’s create a negative buffer of 20 m.  
+
+## Buffer  
+```{r}
+buffer <- boundary_w %>% 
+  st_buffer(dist = -25) 
+  
+
+buffer
+```
+
+```{r}
+yieldmap_raw + 
+  geom_sf(data=boundary_w, 
+          fill = NA) + 
+  geom_sf(data = buffer, 
+          color = "orange", fill = NA, linewidth = 1)
+```
+
+
+## Filtering position  
+```{r}
+yield17_w_pf <- yield17_w_sf %>% 
+  st_intersection(buffer)
+
+yield17_w_pf
+```
+
+## Position yield cleaned summary  
+```{r}
+summary(yield17_w_pf$yield_lbac)
+```
+
+# Raw vs Cleaned data  
+## Summary statistics  
+### Raw yield summary  
+```{r}
+summary_raw <- yield17_w %>% 
+  summarize(n = length(yield_lbac),
+            min = min(yield_lbac),
+            mean = mean(yield_lbac),
+            max = max(yield_lbac),
+            sd = sd(yield_lbac),
+            cv = (sd/mean)*100
+            ) %>% 
+  mutate(data = 'raw') %>% 
+  dplyr::select(data, everything())
+
+summary_raw
+```
+
+### Clean yield summary  
+```{r}
+summary_filtered <- yield17_w_pf %>%
+  summarise(n = length(yield_lbac),
+            min = min(yield_lbac),
+            mean = mean(yield_lbac),
+            max = max(yield_lbac),
+            sd = sd(yield_lbac),
+            cv = (sd/mean)*100
+            ) %>%
+  mutate(data = "clean") %>%
+  dplyr::select(data, everything())
+
+summary_filtered
+```
+
+### Combined yield summary  
+```{r}
+summary_raw %>%
+  bind_rows(summary_filtered)
+```
+
+## Density plot  
+```{r}
+ggplot()+
+  geom_density(data = yield17_w, 
+               aes(x = yield_lbac), 
+               fill = "blue", 
+               alpha = .5)+
+  geom_density(data = yield17_w_pf,
+               aes(x = yield_lbac),
+               fill = "green",
+               alpha = .4)
+```
+
+# Maps  
+## Raw yield map  
+```{r}
+yieldmap_raw
+
+```
+
+## Clean yield map  
+```{r}
+yieldmap_clean <- ggplot(yield17_w_pf)+
+  geom_sf(aes(color = yield_lbac), 
+          size = .1)+
+  scale_color_viridis_b()
+
+yieldmap_clean
+```
+
+## Clean yield map interactive  
+```{r}
+yieldmap_clean_int <- yield17_w_pf %>%
+  mapview(zcol = "yield_lbac",
+        col.regions = viridis(3),
+        alpha.regions = 1,
+        cex = .1,
+        lwd = 0,
+        map.types = "Esri.WorldImagery"
+)
+yieldmap_clean_int
+```
+
+## Side-by-side raw vs. cleaned yield map  
+```{r}
+yieldmap_raw + yieldmap_clean
+```
+
+## Side-by-side raw vs. cleaned yield map interactive  
+```{r}
+sync(yieldmap_raw_int, yieldmap_clean_int)
+```
+
+# Exporting cleaned version  
+```{r}
+write_sf(yield17_w_pf,
+         "../output/yield17_clean.geojson",
+         delete_dsn = TRUE)
+
+```
+
+# Summary  
+Today we:  
+
+- Learned about and implemented 5 yield filters (yield, speed, position)  
+- Compared raw and cleaned yield monitor data
+
+
+
+
