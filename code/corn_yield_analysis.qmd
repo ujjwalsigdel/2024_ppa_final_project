@@ -445,6 +445,148 @@ write_sf(yield_w_pf,
 # Interpolation 
 
 
+```{r reading yield data}
+yield_c <- yield_w_pf
+
+yield_c
+```
+
+```{r summary}
+summary(yield_c)
+```
+
+# Interpolation  
+
+```{r yield clean map}
+yieldclean_map <- ggplot()+
+  geom_sf(data = yield_c,
+          aes(color=yield_buac), size=.1)+
+  scale_color_viridis()+
+  geom_sf(data = boundary,
+          fill=NA,
+          color="blue")
+
+yieldclean_map
+```
+
+Using IDW for interpolation
+## Grid
+```{r grid_v}
+# grid in vector format
+grid_v <- st_make_grid(boundary, 
+                       cellsize = 10)  
+
+grid_v
+
+class(grid_v)
+```
+
+```{r grid vector plot}
+yieldclean_map +
+  geom_sf(data = grid_v,
+          alpha = .5,
+          fill = NA,
+          size = .1)
+
+```
+
+One issue here is that interpolation methods in R do not accept grids in vector format, only in **raster** format.  
+
+Let's rasterize our vector grid.  
+
+```{r grid_r}
+# grid in raster format 
+grid_r <- grid_v %>% 
+  #we need to make grid_v sf not sfc
+  st_as_sf() %>% 
+  st_rasterize(dx = 10, dy = 10) %>% 
+  st_crop(boundary)
+
+grid_r
+
+class(grid_r)
+```
+
+```{r grid_r plot}
+yieldclean_map + 
+  geom_stars(data = grid_r,
+             alpha = .7)
+```
+
+## IDW  
+  
+```{r idw_mod}
+idw_mod <- gstat(formula = yield_buac ~ 1,
+                 data = yield_c)
+
+idw_mod
+
+class(idw_mod)
+```
+
+Now, we need to actually predict our IDW model on our raster grid (this is where the interpolation really happens).  
+```{r idw_pred}
+idw_pred <- predict(idw_mod, grid_r)
+
+idw_pred
+
+class(idw_pred)
+```
+
+```{r idw_pred plot}
+ggplot()+
+  geom_stars(data = idw_pred)+
+  scale_fill_viridis_c()+
+  geom_sf(data = boundary, fill = NA) +
+  geom_sf(data = grid_v,
+          alpha = .5,
+          fill = NA,
+          size = .1)
+
+```
+
+# Grid extraction  
+In this step, the goal is to extract the interpolated yield value from the raster and basically transform it from cell (raster) to a polygon (vector).  
+
+```{r idw_pred_v}
+idw_pred_v <- idw_pred %>% 
+  st_as_sf(as_points = F,
+           merge = F
+           ) %>% 
+  dplyr::select(ipyield_buac = var1.pred)
+
+idw_pred_v
+
+class(idw_pred_v)
+```
+
+```{r idw_pred_v plot}
+ggplot() +
+  geom_sf(data = idw_pred_v, 
+          aes(fill = ipyield_buac),
+          color = NA)+
+  scale_fill_viridis_c()
+
+```
+
+```{r interpolated distribution}
+ggplot() +
+  geom_density(data = idw_pred_v,
+               aes(x = ipyield_buac)
+               ) +
+  geom_density(data = yield_c, 
+               aes(x = yield_buac),
+               color = "blue")
+
+```
+
+# Exporting to file  
+
+```{r exporting}
+write_sf(idw_pred_v, "../data/yield_interpolated.geojson",
+         delete_dsn = T)
+```
+
 
 
 

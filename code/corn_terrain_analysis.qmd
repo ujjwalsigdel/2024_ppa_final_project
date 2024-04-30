@@ -1,0 +1,329 @@
+---
+title: "Terrain properties"
+author: "Ujjwal Sigdel"
+format:
+  html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    number-sections: true
+    theme: journal
+    #cerulean, journal, quartz, sketchy, slate, morph, superhero, vapor
+knitr: 
+  opts_chunk: 
+    message: false
+    warning: false
+---
+
+# Objectives  
+- To do terrain analysis for final project for precision ag class 
+
+# Setup  
+```{r setup}
+
+# Packages
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(readr)
+library(sf) #vector manipulation
+library(ggplot2)
+library(viridis)
+library(ggthemes)
+library(gstat) #IDW
+library(stars) #raster manipulation
+library(terra) #topographical variables
+library(patchwork) #combining multiple plots  
+library(tibble) #rownames to column
+
+```
+
+```{r defining map theme}
+mytheme_map <- 
+  theme_map()+
+  theme(legend.position = "right",
+        panel.background = element_rect(fill = "gray80",
+                                        color = NA),
+        plot.background = element_rect(fill = "gray80",
+                                       color = NA),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+```
+
+```{r reading elevation data}
+elev <- read_csv("../data/Deer Run1 Elevation.csv")
+
+elev
+```
+
+# Wrangling  
+```{r elev_w}
+elev_w <- elev %>% 
+  clean_names() %>% 
+  st_as_sf(coords = c("longitude", "latitude")) %>% 
+  st_set_crs(value = 4326) %>% #setting crs
+  st_transform(crs = 6345) %>% #transforming crs to meters
+  mutate(elev_m = elevation*0.3048) %>% 
+  dplyr::select(elev_m, geometry)
+
+elev_w
+
+summary(elev_w)
+```
+
+# EDA  
+```{r elev_w map}
+elev_w %>%
+  #sample_frac(.1) %>% 
+  ggplot()+
+  geom_sf(aes(color = elev_m), size =.01)+
+  scale_color_viridis_c(option = "E")+
+  mytheme_map
+  #...
+
+```
+Wait, wasn't this a point vector data? 
+How come it looks like polygons?  
+
+# Grid  
+Since we are interpolating, we need to create a grid (same as for the yield exercise) based on the field boundary.    
+
+```{r boundary}
+boundary <- read_sf("../data/boundary/DR1 boundary.shp") %>% 
+  st_transform(crs = 6345)
+
+boundary
+```
+
+```{r grid_r}
+# grid in raster format
+grid_r <- boundary %>% 
+  st_make_grid(cellsize = 10) %>% 
+  st_as_sf() %>% 
+  st_rasterize(dx = 10, dy = 10) %>% 
+  st_crop(boundary)
+
+grid_r
+
+ggplot()+
+  geom_stars(data = grid_r)+
+  mytheme_map
+
+```
+
+# Interpolation  
+```{r idw_mod}
+idw_mod <- gstat(formula = elev_m ~1,
+                 data = elev_w
+                 )
+
+idw_mod
+```
+
+```{r idw_pred}
+idw_pred <- predict(idw_mod, grid_r)
+
+idw_pred
+```
+
+```{r elev_map }
+elev_map <- ggplot() +
+  geom_stars(data = idw_pred) +
+  geom_sf(data = boundary, fill = NA)+
+  scale_fill_viridis_b(option = "E", breaks = c(57:64))+
+  labs(fill = "Elev. (m)")+
+  mytheme_map
+  
+elev_map
+```
+
+
+# Computing secondary variables  
+## Slope  
+```{r slope}
+slope <- idw_pred %>%
+  dplyr::select(elev_m = var1.pred) %>% 
+  # Transforming to SpatRast for slope computation (here we need to transform stars object type to SpatRast)
+  terra::rast() %>% 
+  terra::terrain("slope",
+                 unit = 'radians') %>% 
+  
+    # Transforming back into stars (so works with ggplot)
+  st_as_stars() %>% 
+  
+# Transforming to pct
+mutate(pct = tan(slope)*100) %>% 
+  dplyr::select(pct)
+
+slope
+```
+
+
+```{r slope map}
+slope_map <- ggplot()+
+  geom_stars(data = slope)+
+  geom_sf(data = boundary, 
+          fill = NA)+
+  scale_fill_viridis_b(option = "E")+
+  labs(fill = "Slope\n(%)")+
+  mytheme_map
+
+slope_map
+```
+
+## Aspect  
+```{r aspect}
+aspect <- idw_pred %>%
+  dplyr::select(elev_m = var1.pred) %>%
+  terra::rast() %>%
+  terra::terrain("aspect", unit="degrees") %>% 
+  st_as_stars() %>%
+  st_set_crs(value =  6345)
+
+aspect
+```
+
+
+```{r aspect map}
+aspect_map <- ggplot()+
+  geom_stars(data = aspect)+
+  geom_sf(data = boundary, 
+          fill = NA)+
+  scale_fill_viridis_b(option = "E",
+                       breaks = c(22.5,
+                                  67.5,
+                                  112.5,
+                                  157.5,
+                                  202.5,
+                                  247.5,
+                                  292.5,
+                                  337.5))+
+  labs(fill="Aspect\n(degrees)")+
+  mytheme_map
+
+aspect_map
+```
+
+## Flow direction  
+```{r flowdir}
+flowdir <- idw_pred %>%
+  dplyr::select(elev_m = var1.pred) %>%
+  terra::rast() %>%
+  terra::terrain("flowdir", unit = "radians") %>% 
+  st_as_stars() %>%
+  st_set_crs(value =  6345)
+
+flowdir
+```
+
+
+```{r flowdir map}
+flowdir_map <- ggplot()+
+  geom_stars(data = flowdir)+
+  geom_sf(data = boundary, 
+          fill = NA)+
+  scale_fill_viridis_b(option = "E",
+                       breaks = c(1,2,
+                                  4,8,
+                                  16,32,
+                                  64,128))+
+  labs(fill="Flow dir.")+
+  mytheme_map
+
+flowdir_map
+```
+
+```{r flowdir map 2}
+ggplot()+
+  geom_stars(data = flowdir %>% 
+               mutate(flowdir = factor(flowdir))
+             )+
+  geom_sf(data = boundary, 
+          fill = NA)+
+  scale_fill_discrete()+
+  labs(fill = "Flow Dir. \n(Radians)")+
+  mytheme_map+
+  facet_wrap(~flowdir)+
+  theme(legend.position = "none")
+  
+
+```
+  
+
+## Plotting all together
+```{r plotting all together}
+elev_map + slope_map + aspect_map + flowdir_map 
+
+ggsave("../output/terrain.png", 
+       width = 10, 
+       height = 6)
+```
+
+# Grid extraction  
+```{r elev_v}
+elev_v <- idw_pred %>% 
+  st_as_sf(as_points = F,
+           merge = F) %>% 
+  dplyr::select(elev_m = var1.pred)
+
+elev_v
+```
+
+ 
+
+```{r slope_v}
+slope_v <- slope %>% 
+  st_as_sf(as_points = F,
+           merge = F) %>% 
+  dplyr::select(slope=pct)
+
+slope_v
+```
+How many rows? Why is that?  
+
+```{r aspect_v}
+aspect_v <- aspect %>%
+  st_as_sf(as_points = F, 
+           merge = F) %>%
+  dplyr::select(aspect) 
+
+aspect_v
+```
+```{r flowdir_v}
+flowdir_v <- flowdir %>%
+  st_as_sf(as_points = F, 
+           merge = F) %>%
+  dplyr::select(flowdir) 
+
+flowdir_v
+```
+
+# Joining all topo variables in one object  
+
+```{r terrain_v }
+terrain_v <- elev_v %>% 
+  st_join(slope_v, 
+          join = st_equals,
+          left = T) %>% 
+  st_join(aspect_v,
+                      join = st_equals,
+                      left = T) %>% 
+  st_join(flowdir_v,
+                      join = st_equals,
+                      left = T)
+              
+summary(terrain_v)
+```
+
+# Exporting  
+Exporting to file to use later for management zone creation.  
+```{r exporting}
+write_sf(terrain_v,
+         "../data/terrain_v.geojson", 
+         delete_dsn = T)
+
+```
+
+
+
