@@ -1,0 +1,221 @@
+---
+title: "Soil ECa"
+author: "Ujjwal Sigdel"
+format:
+  html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    number-sections: true
+    theme: journal
+    #cerulean, journal, quartz, sketchy, slate, morph, superhero, vapor
+knitr: 
+  opts_chunk: 
+    message: false
+    warning: false
+---
+
+# Objectives  
+To wrangle and analysis soil EC data for Corn for Precision Ag class final project
+
+# Setup  
+```{r setup }
+# Packages
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(readr)
+library(sf) #vector manipulation
+library(ggplot2)
+library(viridis)
+library(ggthemes)
+library(gstat) #IDW
+library(stars) #raster manipulation
+library(terra) #topographical variables
+library(patchwork) #combining multiple plots  
+library(tibble) #rownames to column
+
+```
+
+```{r defining map theme}
+mytheme_map <- 
+  theme_map()+
+  theme(legend.position = "right",
+        panel.background = element_rect(fill="gray80",
+                                        color=NA),
+        plot.background = element_rect(fill="gray80",
+                                       color=NA),
+        legend.title = element_text(size=14),
+        legend.text = element_text(size=12))
+
+```
+
+```{r reading elevation data}
+eca <- read_csv("../data/Deer Run1 Soil EC Data.csv")
+
+eca
+```
+# Wrangling  
+```{r eca_w}
+eca_w <- eca %>% 
+  clean_names() %>% 
+  dplyr::select(lon = longitude,
+                lat = latitude,
+                eca30_dsm = shallow_eca,
+                eca90_dsm = deep_eca,
+                elev_m = elevation_m
+                ) %>% 
+  st_as_sf(coords = c("lon", "lat")) %>% 
+  st_set_crs(value = 4326) %>% 
+  st_transform(crs = 6345)
+
+
+eca_w 
+```
+
+# EDA  
+```{r eca30 plot}
+eca_w %>% 
+  ggplot()+
+  geom_sf(aes(color = eca30_dsm),
+          size = .5)+
+  scale_color_viridis_b()+
+  mytheme_map
+
+```
+
+
+```{r eca90 plot}
+eca_w %>% 
+  ggplot()+
+  geom_sf(aes(color = eca90_dsm),
+          size = .5)+
+  scale_color_viridis_b()+
+  mytheme_map
+
+```
+
+# Grid  
+Since we are interpolating, we need to create a grid (same as for the yield and terrain exercises) based on the field boundary.    
+
+```{r boundary}
+boundary <- read_sf("../data/boundary/DR1 boundary.shp") %>% 
+  st_transform(crs = 6345)
+
+boundary
+```
+
+```{r grid_r}
+# grid in vector format
+grid_r <- boundary %>% 
+  st_make_grid(cellsize = 10) %>% 
+  st_as_sf() %>% 
+  st_rasterize(dx = 10,
+               dy = 10) %>% 
+  st_crop(boundary)
+
+grid_r
+
+ggplot()+
+  geom_stars(data = grid_r)+
+  mytheme_map
+
+```
+
+# Interpolation
+## eca30  
+```{r eca30_idw_mod}
+eca30_idw_mod <- gstat(formula = eca30_dsm ~1,
+                       data = eca_w)
+
+eca30_idw_mod 
+```
+
+```{r eca30_idw_pred}
+eca30_idw_pred <- predict(eca30_idw_mod, grid_r)  
+
+eca30_idw_pred
+```
+
+```{r eca30_map }
+eca30_map <- ggplot()+
+  geom_stars(data = eca30_idw_pred)+
+  scale_fill_viridis_c()+
+  geom_sf(data = boundary, fill=NA)+
+  labs(fill = "ECa\n0-30 cm\n(ds/m)")+
+  mytheme_map
+
+eca30_map
+```
+
+## eca90  
+```{r eca90_idw_mod}
+eca90_idw_mod <- gstat(formula = eca90_dsm ~ 1,
+                       data = eca_w)
+
+eca90_idw_mod
+```
+
+```{r eca90_idw_pred}
+eca90_idw_pred <- predict(eca90_idw_mod, grid_r)
+
+eca90_idw_pred
+```
+
+```{r eca90_map }
+eca90_map <- ggplot()+
+  geom_stars(data = eca90_idw_pred)+
+  scale_fill_viridis_c()+
+  geom_sf(data=boundary, fill=NA)+
+  labs(fill="ECa\n0-90 cm\n(dS/m)")+
+  mytheme_map
+
+eca90_map
+```
+
+## Plotting all together
+```{r plotting all together}
+eca30_map + eca90_map
+
+ggsave("../output/soileca.png", 
+       width = 6, 
+       height = 3)
+```
+
+# Grid extraction  
+```{r eca30_v}
+eca30_v <- eca30_idw_pred %>% 
+  st_as_sf(as_points = F, #if F is not done, by default it is true, and it will give the centroids
+           merge = F) %>% 
+  dplyr::select(eca30_dsm = var1.pred)
+eca30_v
+```
+
+
+```{r eca90_v}
+eca90_v <- eca90_idw_pred %>%
+  st_as_sf(as_points = F, 
+           merge = F) %>%
+  dplyr::select(eca90_dsm=var1.pred) 
+
+eca90_v
+```
+
+# Merging eca layers  
+```{r eca_v }
+eca_v <- eca30_v %>% 
+  st_join(eca90_v,
+          join = st_equals,
+          left = T)
+
+eca_v
+```
+
+# Exporting  
+Exporting to file to use later for management zone creation.  
+```{r exporting}
+write_sf(eca_v,
+         "../data/eca_v.geojson",
+         delete_dsn = T)
+
+```
