@@ -132,8 +132,11 @@ elev_map <- ggplot() +
   geom_stars(data = idw_pred) +
   geom_sf(data = boundary, fill = NA)+
   scale_fill_viridis_b(option = "E", breaks = c(57:64))+
-  labs(fill = "Elev. (m)")+
-  mytheme_map
+  labs(fill = "Elev. (m)",
+       title = "Elevation map of DeerRun1 field")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
   
 elev_map
 ```
@@ -166,8 +169,11 @@ slope_map <- ggplot()+
   geom_sf(data = boundary, 
           fill = NA)+
   scale_fill_viridis_b(option = "E")+
-  labs(fill = "Slope\n(%)")+
-  mytheme_map
+  labs(fill = "Slope\n(%)",
+       title = "Slope map of DeerRun1 field")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
 
 slope_map
 ```
@@ -199,8 +205,11 @@ aspect_map <- ggplot()+
                                   247.5,
                                   292.5,
                                   337.5))+
-  labs(fill="Aspect\n(degrees)")+
-  mytheme_map
+  labs(fill="Aspect\n(degrees)",
+       title = "Aspect map of DeerRun1 field")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
 
 aspect_map
 ```
@@ -228,8 +237,11 @@ flowdir_map <- ggplot()+
                                   4,8,
                                   16,32,
                                   64,128))+
-  labs(fill="Flow dir.")+
-  mytheme_map
+  labs(fill="Flow dir.",
+       title = "Flow direction map of DeerRun1 field")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
 
 flowdir_map
 ```
