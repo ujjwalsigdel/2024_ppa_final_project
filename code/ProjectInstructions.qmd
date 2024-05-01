@@ -177,13 +177,19 @@ standard deviation:68.23506
 
 `![](../output/cleaned yield distribution.png)`
 
-## 4. When creating a grid for interpolation, what grid cell size did you use? Why did you select this size?  
+## 4. When creating a grid for interpolation, what grid cell size did you use? Why did you select this size?
+Ans: Grid size of 10x10m was used for interpolation. I thought this will be the good size for good spatial resolution with efficient computational time. I could have used smaller size for better resolution however that would have been computational heavy. And, I didn't want to compromise spatial resolution with larger size than 10x10 meters. 
 
 ## 5. Show Natalie a map of the cleaned interpolated yield data (include the field boundary).  
 
+`![](../output/Interpolated clean map.png)`
+
 ## 6. Show Natalie a map of the interpolated terrain variables (include the field boundary).  
 
+`![](../output/soileca.png)`
+
 ## 7. Show Natalie a map of the interpolated soil ECa variables (include the field boundary).  
+
 
 ## 8. How many clusters/zones did you decide that this field needs? What metric did you use to make this decision? (check the `Code tips` section below for a note on this).  
 
