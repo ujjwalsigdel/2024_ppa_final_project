@@ -151,17 +151,31 @@ Once you get started and as you progress in the project tasks, Natalie is follow
 
 ## 1. What is the number of observations, minimum, mean, maximum, and standard deviation for the **raw** yield data (in bu/ac)? Show Natalie a plot with the density distribution of the **raw** yield data.
 Ans: For the **raw** yield data (bu/ac),   
-number of observations: 
-minimum yield:
-mean yield:
-maximum yield:
-standard deviation: 
+number of observations: 73574
+minimum yield: 0 bu/ac
+mean yield: 161.3 bu/ac
+maximum yield: 1785.8 bu/ac
+standard deviation: 103.1483 bu/ac
 
-## 2. How many meters of negative buffer did you use for this field? Was that enough to remove low yielding data points near the field border? Show Natalie a map with the field border, points colored by raw yield data, and the buffer outline. 
+`![](../output/raw yield distribution.png)`
+
+
+## 2. How many meters of negative buffer did you use for this field? Was that enough to remove low yielding data points near the field border? Show Natalie a map with the field border, points colored by raw yield data, and the buffer outline.
+I used 30 meters as my buffer for this field. This was quite enough to remove low yielding data points near the field above. However, with 30 m buffer, it was hard to remove some of the low yielding yields in the southern part. The decision of not using more than 30m was based on the fact that if it was used, more of the northern part would have been removed with good yield data. 
+
+`![](../output/raw_vs_clean.png)`
+
 
 
 ## 3. What is the number of observations, minimum, mean, maximum, and standard deviation for the **cleaned** yield data (in bu/ac)? Show Natalie a plot with the density distribution of the **cleaned** yield data.  
+For the **cleaned** yield data,
+number of observations: 60851
+minimum yield: 0 bu/ac
+mean yield: 181.6
+maximum yield: 362.1 bu/ac
+standard deviation:68.23506
 
+`![](../output/cleaned yield distribution.png)`
 
 ## 4. When creating a grid for interpolation, what grid cell size did you use? Why did you select this size?  
 

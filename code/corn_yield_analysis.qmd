@@ -32,6 +32,24 @@ library(viridis)
 library(mapview)
 library(leafsync)
 library(patchwork)
+library(stars)
+library(starsExtra)
+library(gstat)
+library(ggthemes)
+
+```
+
+# theme map
+```{r defining map theme}
+mytheme_map <- 
+  theme_map()+
+  theme(legend.position = "right",
+        panel.background = element_rect(fill="gray80",
+                                        color=NA),
+        plot.background = element_rect(fill="gray80",
+                                       color=NA),
+        legend.title = element_text(size=14),
+        legend.text = element_text(size=12))
 
 ```
 
@@ -56,8 +74,21 @@ summary(yield)
 
 
 ```{r yield distribution - density plot}
-ggplot(yield, aes(x=yield_buac))+
-  geom_density()
+raw_yield_dist <- ggplot(yield, aes(x=yield_buac))+
+  geom_density()+
+  scale_x_continuous(breaks = seq(0, 2000, 100))+
+  labs(title = " Yield Distribution",
+       y = "Density",
+       x = "Raw dry yield (bu/ac)")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
+  
+
+raw_yield_dist
+
+ggsave("../output/raw yield distribution.png",
+       width = 6,
+       height = 4)
 
 ```
 
@@ -135,17 +166,17 @@ yieldmap_raw
 ```{r}
 #| warning: false
 
-yieldmap_raw_int <- yield_w %>%
-  filter(yield_kgha < 25000) %>%
-  mapview(zcol = "yield_kgha",
-        col.regions = viridis(3),
-        alpha.regions = 1,
-        cex = .1,
-        lwd = 0,
-        map.types = 'Esri.WorldImagery'
-)
-
-yieldmap_raw_int
+# yieldmap_raw_int <- yield_w %>%
+#   filter(yield_kgha < 500) %>%
+#   mapview(zcol = "yield_buac",
+#         col.regions = viridis(3),
+#         alpha.regions = 1,
+#         cex = .1,
+#         lwd = 0,
+#         map.types = 'Esri.WorldImagery'
+# )
+# 
+# yieldmap_raw_int
 ```
 
 Applying filters 
@@ -313,17 +344,25 @@ Let’s create a negative buffer of 20 m.
 ## Buffer  
 ```{r}
 buffer <- boundary %>% 
-  st_buffer(dist = -25) 
+  st_buffer(dist = -30) 
   
 buffer
 ```
 
 ```{r}
-yieldmap_raw + 
+yieldmap_raw <- yieldmap_raw + 
   geom_sf(data=boundary, 
           fill = NA) + 
   geom_sf(data = buffer, 
-          color = "orange", fill = NA, linewidth = 1)
+          color = "orange", fill = NA, linewidth = 1)+
+  labs(color = "Yield\n(bu/ac)",
+       title = "Raw yield map with boundary and border")+
+  mytheme_map+
+    theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
+
+yieldmap_raw
+
 ```
 
 
@@ -393,6 +432,25 @@ ggplot()+
                alpha = .4)
 ```
 
+```{r cleaned yield distribution - density plot}
+cleaned_yield_dist <- ggplot(yield_w_pf, aes(x=yield_buac))+
+  geom_density()+
+  scale_x_continuous(breaks = seq(0, 2000, 100))+
+  labs(title = " Yield Distribution",
+       y = "Density",
+       x = "Cleaned dry yield (bu/ac)")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
+  
+
+cleaned_yield_dist
+
+ggsave("../output/cleaned yield distribution.png",
+       width = 6,
+       height = 4)
+
+```
+
 # Maps  
 ## Raw yield map  
 ```{r}
@@ -405,22 +463,28 @@ yieldmap_raw
 yieldmap_clean <- ggplot(yield_w_pf)+
   geom_sf(aes(color = yield_buac), 
           size = .1)+
-  scale_color_viridis_b()
+  scale_color_viridis_b()+
+labs(color = "Yield\n(bu/ac)",
+       title = "Clean yield map with boundary and border")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
+
 
 yieldmap_clean
 ```
 
 ## Clean yield map interactive  
 ```{r}
-yieldmap_clean_int <- yield_w_pf %>%
-  mapview(zcol = "yield_buac",
-        col.regions = viridis(3),
-        alpha.regions = 1,
-        cex = .1,
-        lwd = 0,
-        map.types = "Esri.WorldImagery"
-)
-yieldmap_clean_int
+# yieldmap_clean_int <- yield_w_pf %>%
+#   mapview(zcol = "yield_buac",
+#         col.regions = viridis(3),
+#         alpha.regions = 1,
+#         cex = .1,
+#         lwd = 0,
+#         map.types = "Esri.WorldImagery"
+# )
+# yieldmap_clean_int
 ```
 
 ## Side-by-side raw vs. cleaned yield map  
@@ -431,7 +495,7 @@ yieldmap_raw + yieldmap_clean
 
 ## Side-by-side raw vs. cleaned yield map interactive  
 ```{r}
-sync(yieldmap_raw_int, yieldmap_clean_int)
+#sync(yieldmap_raw_int, yieldmap_clean_int)
 ```
 
 # Exporting cleaned version  
@@ -453,6 +517,7 @@ yield_c
 
 ```{r summary}
 summary(yield_c)
+sd(yield_c$yield_buac)
 ```
 
 # Interpolation  
@@ -464,9 +529,24 @@ yieldclean_map <- ggplot()+
   scale_color_viridis()+
   geom_sf(data = boundary,
           fill=NA,
-          color="blue")
+          color="blue")+
+geom_sf(data = buffer, 
+          color = "orange", fill = NA, linewidth = 1)+
+  labs(color = "Yield\n(bu/ac)",
+       title = "Clean yield map with boundary and border")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
 
 yieldclean_map
+```
+
+## Side-by-side raw vs. cleaned yield map  
+```{r}
+
+combined <- yieldmap_raw + yieldclean_map
+#ggsave("../output/raw_vs_clean.png", width=10, height=6)
+combined
 ```
 
 Using IDW for interpolation
@@ -565,8 +645,20 @@ ggplot() +
   geom_sf(data = idw_pred_v, 
           aes(fill = ipyield_buac),
           color = NA)+
-  scale_fill_viridis_c()
+  scale_fill_viridis_c()+
+  geom_sf(data = boundary,
+          fill=NA,
+          color="black",
+          linewidth = 0.5)+
+  labs(fill = "Yield\n(bu/ac)",
+       title = "Clean yield map with boundary and border")+
+  mytheme_map+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(title = element_text(face="bold", size =12))
 
+# ggsave("../output/Interpolated clean map.png",
+#        width = 5,
+#        height = 5)
 ```
 
 ```{r interpolated distribution}
